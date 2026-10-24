@@ -3,6 +3,7 @@
 //
 //   massif_snapshot out.png [scale]
 //   massif_snapshot --selftest       the plugin as a host drives it: blocks, twice the rate, bypass
+//   massif_snapshot --switches       the window toggles under the pointer: clicks, drags, the wheel
 #include "../Source/PluginEditor.h"
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter();
@@ -102,6 +103,97 @@ int selfTest (juce::AudioProcessor& processor, juce::AudioProcessorValueTreeStat
 
     return failures == 0 ? 0 : 1;
 }
+
+/** The window toggles as a hand works them, straight on the editor's components. */
+int switchTest (onirique::MassifProcessor& processor, juce::AudioProcessorValueTreeState& state)
+{
+    using namespace juce;
+    int failures = 0;
+    auto check = [&] (bool ok, const char* what)
+    {
+        std::printf ("  [%s] %s\n", ok ? " ok " : "FAIL", what);
+        failures += ok ? 0 : 1;
+    };
+
+    std::unique_ptr<AudioProcessorEditor> editor (processor.createEditor());
+    editor->setSize (onirique::MassifEditor::kWidth, onirique::MassifEditor::kHeight);
+
+    // The component that takes the pointer for a control: the one lying on its box.
+    auto find = [&] (const std::string& id) -> Component*
+    {
+        for (const auto& c : onirique::layout::controls())
+            if (c.id == id)
+                for (auto* front : editor->getChildren())
+                    for (auto* child : front->getChildren())
+                        if (child->getBounds() == Rectangle<float> (c.hit.width, c.hit.height).withCentre ({ c.hit.x, c.hit.y }).toNearestInt())
+                            return child;
+
+        return nullptr;
+    };
+
+    auto index = [&] (const char* id) { auto* p = state.getParameter (id); return roundToInt (p->convertFrom0to1 (p->getValue())); };
+    auto source = Desktop::getInstance().getMainMouseSource();
+
+    auto event = [&] (Component* c, Point<float> at, Point<float> from, bool dragged)
+    {
+        return MouseEvent (source, at, {}, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, c, c, Time::getCurrentTime(), from, Time::getCurrentTime(), 1, dragged);
+    };
+
+    auto click = [&] (Component* c, bool top)
+    {
+        const Point<float> at ((float) c->getWidth() * 0.5f, (float) c->getHeight() * (top ? 0.25f : 0.75f));
+        c->mouseDown (event (c, at, at, false));
+        c->mouseUp (event (c, at, at, false));
+    };
+
+    auto drag = [&] (Component* c, float dy)
+    {
+        const Point<float> from ((float) c->getWidth() * 0.5f, (float) c->getHeight() * 0.5f);
+        c->mouseDown (event (c, from, from, false));
+
+        for (int i = 1; i <= 10; ++i)
+            c->mouseDrag (event (c, from + Point<float> (0.0f, dy * (float) i / 10.0f), from, true));
+
+        c->mouseUp (event (c, from + Point<float> (0.0f, dy), from, true));
+    };
+
+    auto* mode = find ("l1mode");
+    auto* shelf = find ("l2shelf");
+    check (mode != nullptr && shelf != nullptr, "each toggle has its half of the window");
+
+    if (mode == nullptr || shelf == nullptr)
+        return 1;
+
+    std::printf ("  L1 BOOST / CUT takes %d x %d points\n", mode->getWidth(), mode->getHeight());
+    check (mode->getWidth() >= 50 && mode->getHeight() >= 70, "a target as big as its words");
+
+    click (mode, true);
+    check (index ("l1mode") == msf::boost, "a click on BOOST: boost");
+    check (index ("r1mode") == msf::boost, "and, linked, the right side with it");
+    click (mode, true);
+    check (index ("l1mode") == msf::out, "BOOST clicked again: out");
+    click (mode, false);
+    check (index ("l1mode") == msf::cut, "a click on CUT: cut");
+    click (mode, true);
+    check (index ("l1mode") == msf::boost, "from cut, a click on BOOST goes straight there");
+
+    drag (mode, 40.0f);
+    check (index ("l1mode") == msf::cut, "dragged down from boost: cut");
+    drag (mode, -14.0f);
+    check (index ("l1mode") == msf::out, "dragged up a step: out");
+
+    mode->mouseWheelMove (event (mode, {}, {}, false), MouseWheelDetails { 0.0f, 0.5f, false, false, false });
+    check (index ("l1mode") == msf::boost, "the wheel up a notch: boost");
+
+    click (shelf, true);
+    check (index ("l2shelf") == 1, "a click on SHELF: shelf");
+    click (shelf, false);
+    check (index ("l2shelf") == 0, "a click on BELL: bell");
+    drag (shelf, -20.0f);
+    check (index ("l2shelf") == 1, "dragged up: shelf");
+
+    return failures == 0 ? 0 : 1;
+}
 }
 
 int main (int argc, char** argv)
@@ -120,6 +212,9 @@ int main (int argc, char** argv)
 
     if (juce::String (argc > 1 ? argv[1] : "") == "--selftest")
         return selfTest (massif, state);
+
+    if (juce::String (argc > 1 ? argv[1] : "") == "--switches")
+        return switchTest (massif, state);
 
     // Something worth looking at: a few bands in, some out, a shelf, the filters.
     for (const auto* side : { "l", "r" })

@@ -37,11 +37,16 @@ private:
         void paintOverChildren (Graphics& g) override { onPaintOver (g); }
     };
 
-    /** What takes the pointer for a toggle, a lamp or the power switch: a click. */
+    /** What takes the pointer for a toggle, a lamp or the power switch: a
+        click, and for a toggle a drag up or down, or the wheel. */
     struct Switch final : Component, SettableTooltipClient
     {
-        std::function<void (const MouseEvent&)> onClick;
-        void mouseDown (const MouseEvent& e) override { onClick (e); }
+        std::function<void (const MouseEvent&)> onDown, onDrag, onUp;
+        std::function<void (float)> onWheel;
+        void mouseDown (const MouseEvent& e) override { onDown (e); }
+        void mouseDrag (const MouseEvent& e) override { onDrag (e); }
+        void mouseUp (const MouseEvent& e) override { onUp (e); }
+        void mouseWheelMove (const MouseEvent&, const MouseWheelDetails& w) override { onWheel (w.deltaY); }
     };
 
     /** A control of the front, the component that takes the pointer for it,
@@ -59,7 +64,14 @@ private:
     void paintFront (Graphics&);
     void paintReadout (Graphics&);
 
-    void click (const Part&, const MouseEvent&);
+    // A switch's handling: where it was when pressed, then a drag moves its
+    // lever step by step, and a click without a drag sends it where it was clicked.
+    void press (const Part&);
+    void drag (const Part&, const MouseEvent&);
+    void release (const Part&, const MouseEvent&);
+    void wheel (const Part&, float delta);
+    void choose (const Part&, int index);
+    static int indexOf (const Part&);
     void set (RangedAudioParameter&, float normalised);
 
     /** Linked, the twin of a control goes where it is. */
@@ -90,6 +102,10 @@ private:
     String readout;
 
     bool following = false;
+
+    int pressedIndex = 0;
+    bool dragged = false;
+    float wheelTravel = 0.0f;
 
     TooltipWindow tooltips { this, 2000 };
 

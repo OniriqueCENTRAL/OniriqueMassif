@@ -48,14 +48,21 @@ inline constexpr const Run* kRuns[] = { &kKnob, &kSmall, &kCentre, &kToggle, &kL
 
 constexpr float kKnobRadius = 27.5f, kSmallRadius = 21.0f, kToggleUnit = 17.0f;
 
+/** Where the pointer takes a control: a box, by its centre. */
+struct Box { float x, y, width, height; };
+
+constexpr Box square (float x, float y, float size) { return { x, y, size, size }; }
+
 /** A control: its parameter, where it is, how it is shown and handled. A
-    knob is dragged; a toggle, a lamp or the power switch is clicked. */
+    knob is dragged; a toggle, a lamp or the power switch is clicked (a
+    toggle may be dragged too). */
 struct Control
 {
     std::string id, name;
     const Run* run;          // nullptr: nothing of its own to show (a lamp, lit or not on the front)
     bool clicked;
-    float x, y, size;        // its centre, and the square that takes the pointer
+    float x, y;              // its centre
+    Box hit;                 // what takes the pointer for it
     int positions;           // 0: it turns freely; else that many steps
     float fromDegrees, toDegrees;   // at the parameter's lowest and highest
 };
@@ -64,6 +71,7 @@ struct Control
 constexpr float kBandX[2][4] = { { 176.0f, 295.5f, 415.0f, 534.5f }, { 865.5f, 985.0f, 1104.5f, 1224.0f } };
 constexpr float kGainY = 146.0f, kBandwidthY = 239.0f, kFreqY = 326.5f, kToggleY = 54.0f;
 constexpr float kModeDx = -32.0f, kShelfDx = 28.0f;
+constexpr float kWindowY = 46.5f, kWindowHalfWidth = 53.0f, kWindowHalfHeight = 36.0f, kWindowRadius = 8.0f, kWindowHeight = 3.0f;
 
 // The middle: one column a side, the shared parts between them.
 constexpr float kMiddleX[2] = { 638.0f, 762.0f };
@@ -86,23 +94,27 @@ inline std::vector<Control> controls()
         {
             const auto x = kBandX[side][band];
             const auto n = s + std::to_string (band + 1) + " ";
-            c.push_back ({ bandId (side, band, "gain"), n + "GAIN", &kKnob, false, x, kGainY, 58.0f, 0, -140.0f, 140.0f });
-            c.push_back ({ bandId (side, band, "bw"), n + "BANDWIDTH", &kSmall, false, x, kBandwidthY, 46.0f, 0, -135.0f, 135.0f });
-            c.push_back ({ bandId (side, band, "freq"), n + "FREQUENCY", &kKnob, false, x, kFreqY, 58.0f, 11, -155.0f, 155.0f });
+            c.push_back ({ bandId (side, band, "gain"), n + "GAIN", &kKnob, false, x, kGainY, square (x, kGainY, 58.0f), 0, -140.0f, 140.0f });
+            c.push_back ({ bandId (side, band, "bw"), n + "BANDWIDTH", &kSmall, false, x, kBandwidthY, square (x, kBandwidthY, 46.0f), 0, -135.0f, 135.0f });
+            c.push_back ({ bandId (side, band, "freq"), n + "FREQUENCY", &kKnob, false, x, kFreqY, square (x, kFreqY, 58.0f), 11, -155.0f, 155.0f });
+
             // Boost up, out in the middle, cut down; the shelf up, the bell down.
-            c.push_back ({ bandId (side, band, "mode"), n + "BOOST / CUT", &kToggle, true, x + kModeDx, kToggleY, 30.0f, 3, 35.0f, -35.0f });
-            c.push_back ({ bandId (side, band, "shelf"), n + "SHELF / BELL", &kToggle, true, x + kShelfDx, kToggleY, 30.0f, 2, -35.0f, 35.0f });
+            // Each toggle is taken by its whole half of the window, its words with it.
+            const Box left { x - 0.5f * kWindowHalfWidth, kWindowY, kWindowHalfWidth, 2.0f * kWindowHalfHeight };
+            const Box right { x + 0.5f * kWindowHalfWidth, kWindowY, kWindowHalfWidth, 2.0f * kWindowHalfHeight };
+            c.push_back ({ bandId (side, band, "mode"), n + "BOOST / CUT", &kToggle, true, x + kModeDx, kToggleY, left, 3, 35.0f, -35.0f });
+            c.push_back ({ bandId (side, band, "shelf"), n + "SHELF / BELL", &kToggle, true, x + kShelfDx, kToggleY, right, 2, -35.0f, 35.0f });
         }
 
-        c.push_back ({ sideId (side, "in"), s + " IN", nullptr, true, kLampX[side], kLampY, 30.0f, 2, 0.0f, 0.0f });
-        c.push_back ({ sideId (side, "gain"), s + " GAIN", &kCentre, false, kMiddleX[side], kOutGainY, 46.0f, 0, -145.0f, 145.0f });
-        c.push_back ({ sideId (side, "lowpass"), s + " LOW PASS", &kCentre, false, kMiddleX[side], kLowPassY, 46.0f, 6, -77.0f, 77.0f });
-        c.push_back ({ sideId (side, "highpass"), s + " HIGH PASS", &kCentre, false, kMiddleX[side], kHighPassY, 46.0f, 6, -77.0f, 77.0f });
+        c.push_back ({ sideId (side, "in"), s + " IN", nullptr, true, kLampX[side], kLampY, { kLampX[side], kLampY - 8.0f, 34.0f, 44.0f }, 2, 0.0f, 0.0f });
+        c.push_back ({ sideId (side, "gain"), s + " GAIN", &kCentre, false, kMiddleX[side], kOutGainY, square (kMiddleX[side], kOutGainY, 46.0f), 0, -145.0f, 145.0f });
+        c.push_back ({ sideId (side, "lowpass"), s + " LOW PASS", &kCentre, false, kMiddleX[side], kLowPassY, square (kMiddleX[side], kLowPassY, 46.0f), 6, -77.0f, 77.0f });
+        c.push_back ({ sideId (side, "highpass"), s + " HIGH PASS", &kCentre, false, kMiddleX[side], kHighPassY, square (kMiddleX[side], kHighPassY, 46.0f), 6, -77.0f, 77.0f });
     }
 
-    c.push_back ({ "link", "LINK", &kLever, true, kCentreX, kLinkY, 30.0f, 2, -35.0f, 35.0f });
+    c.push_back ({ "link", "LINK", &kLever, true, kCentreX, kLinkY, { kCentreX, kLinkY - 6.0f, 40.0f, 40.0f }, 2, -35.0f, 35.0f });
     // The power knob's first position is ON (the bypass off), pointing up.
-    c.push_back ({ "bypass", "POWER", &kCentre, true, kCentreX, kPowerY, 44.0f, 2, 0.0f, -50.0f });
+    c.push_back ({ "bypass", "POWER", &kCentre, true, kCentreX, kPowerY, square (kCentreX, kPowerY, 44.0f), 2, 0.0f, -50.0f });
 
     return c;
 }
@@ -120,7 +132,6 @@ struct Window { float x, y, halfWidth, halfHeight; };       // the black windows
 struct Screw { float x, y, radius, slot; };
 
 constexpr float kPlateTop = 96.0f, kPlateBottom = 380.0f, kPlateHalfWidth = 56.0f, kPlateHeight = 2.2f;
-constexpr float kWindowY = 46.5f, kWindowHalfWidth = 53.0f, kWindowHalfHeight = 36.0f, kWindowRadius = 8.0f, kWindowHeight = 3.0f;
 
 inline std::vector<Plate> plates()
 {

@@ -38,10 +38,10 @@ namespace
         else if (endsWith (c, "freq"))
             text = std::string ("Frequency : la fréquence de la bande, en onze positions, de ") + msf::kBandRanges[band] + " Hz.";
         else if (endsWith (c, "mode"))
-            text = "BOOST / OUT / CUT : levier en haut, la bande relève (BOOST s'allume en vert) ; au milieu, elle est hors circuit ; en bas, elle creuse (CUT s'allume en rouge).";
+            text = "BOOST / OUT / CUT : un clic sur BOOST relève la bande (le mot s'allume en vert), un clic sur CUT la creuse (en rouge) ; un clic sur le mot déjà allumé la remet hors circuit (OUT). On peut aussi glisser le levier vers le haut ou le bas, ou tourner la molette dessus.";
         else if (endsWith (c, "shelf"))
-            text = band < 2 ? "SHELF / BELL : en haut, une étagère qui relève ou creuse tout ce qui est sous la fréquence ; en bas, une cloche."
-                            : "SHELF / BELL : en haut, une étagère qui relève ou creuse tout ce qui est au-dessus de la fréquence ; en bas, une cloche.";
+            text = band < 2 ? "SHELF / BELL : un clic sur SHELF donne une étagère qui relève ou creuse tout ce qui est sous la fréquence, un clic sur BELL une cloche. On peut aussi glisser le levier, ou tourner la molette dessus."
+                            : "SHELF / BELL : un clic sur SHELF donne une étagère qui relève ou creuse tout ce qui est au-dessus de la fréquence, un clic sur BELL une cloche. On peut aussi glisser le levier, ou tourner la molette dessus.";
         else if (isIn (c))
             text = "IN : allumé, l'égaliseur de ce côté est en service ; éteint, les bandes et les filtres sont à plat, mais le son passe toujours par les lampes.";
         else if (endsWith (c, "lowpass"))
@@ -94,7 +94,10 @@ MassifEditor::MassifEditor (MassifProcessor& p)
         if (control.clicked)
         {
             auto sw = std::make_unique<Switch>();
-            sw->onClick = [this, &part] (const MouseEvent& e) { click (part, e); };
+            sw->onDown = [this, &part] (const MouseEvent&) { press (part); };
+            sw->onDrag = [this, &part] (const MouseEvent& e) { drag (part, e); };
+            sw->onUp = [this, &part] (const MouseEvent& e) { release (part, e); };
+            sw->onWheel = [this, &part] (float delta) { wheel (part, delta); };
             sw->setTooltip (describe (control));
             sw->setMouseCursor (MouseCursor::PointingHandCursor);
             part.component = sw.get();
@@ -121,7 +124,7 @@ MassifEditor::MassifEditor (MassifProcessor& p)
             components.push_back (std::move (slider));
         }
 
-        part.component->setBounds (Rectangle<float> (control.size, control.size).withCentre ({ control.x, control.y }).toNearestInt());
+        part.component->setBounds (Rectangle<float> (control.hit.width, control.hit.height).withCentre ({ control.hit.x, control.hit.y }).toNearestInt());
         front.addAndMakeVisible (part.component);
     }
 
@@ -210,17 +213,27 @@ void MassifEditor::follow (const Part& part)
     part.twin->setValueNotifyingHost (part.parameter->getValue());
 }
 
-void MassifEditor::click (const Part& part, const MouseEvent& e)
+int MassifEditor::indexOf (const Part& part)
 {
+    return roundToInt (part.parameter->convertFrom0to1 (part.parameter->getValue()));
+}
+
+namespace
+{
+    bool isToggle (const layout::Control& c) { return c.run != nullptr && c.run->kind == layout::Kind::toggle; }
+
+    /** Which way the index goes for the lever going up a step. */
+    int upStep (const layout::Control& c) { return c.toDegrees > c.fromDegrees ? 1 : -1; }
+}
+
+void MassifEditor::choose (const Part& part, int index)
+{
+    index = jlimit (0, part.control.positions - 1, index);
+
+    if (index == indexOf (part))
+        return;
+
     auto& parameter = *part.parameter;
-    auto index = roundToInt (parameter.convertFrom0to1 (parameter.getValue()));
-
-    // A three-way toggle goes up a step when clicked above its middle, down below it.
-    if (part.control.positions == 3)
-        index = jlimit (0, 2, index + (e.position.y < (float) part.component->getHeight() * 0.5f ? -1 : 1));
-    else
-        index = 1 - index;
-
     set (parameter, parameter.convertTo0to1 ((float) index));
 
     if (part.twin != nullptr && linked())
@@ -231,6 +244,64 @@ void MassifEditor::click (const Part& part, const MouseEvent& e)
         for (const auto& p : parts)
             if (p.twin != nullptr && p.control.id[0] == 'l')
                 set (*p.twin, p.parameter->getValue());
+}
+
+void MassifEditor::press (const Part& part)
+{
+    pressedIndex = indexOf (part);
+    dragged = false;
+}
+
+void MassifEditor::drag (const Part& part, const MouseEvent& e)
+{
+    // A lever follows the hand: a step for every few points up or down.
+    const auto dy = (float) e.getDistanceFromDragStartY();
+
+    if (! isToggle (part.control) || (! dragged && std::abs (dy) < 4.0f))
+        return;
+
+    dragged = true;
+    choose (part, pressedIndex - upStep (part.control) * roundToInt (dy / 12.0f));
+}
+
+void MassifEditor::release (const Part& part, const MouseEvent& e)
+{
+    if (dragged)
+        return;
+
+    const auto& c = part.control;
+    const auto now = indexOf (part);
+
+    if (! isToggle (c))
+    {
+        choose (part, 1 - now);
+        return;
+    }
+
+    // A click sends the lever where it was clicked: up on BOOST or SHELF,
+    // down on CUT or BELL; clicked where it already is, it comes back out.
+    const auto top = upStep (c) > 0 ? c.positions - 1 : 0, bottom = c.positions - 1 - top;
+    auto target = e.position.y < (float) part.component->getHeight() * 0.5f ? top : bottom;
+
+    if (target == now)
+        target = c.positions == 3 ? 1 : c.positions - 1 - now;
+
+    choose (part, target);
+}
+
+void MassifEditor::wheel (const Part& part, float delta)
+{
+    if (! isToggle (part.control))
+        return;
+
+    // A step for each notch, however finely the wheel or the pad reports it.
+    wheelTravel += delta;
+
+    if (std::abs (wheelTravel) < 0.2f)
+        return;
+
+    choose (part, indexOf (part) + upStep (part.control) * (wheelTravel > 0.0f ? 1 : -1));
+    wheelTravel = 0.0f;
 }
 
 void MassifEditor::timerCallback()

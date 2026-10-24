@@ -51,8 +51,10 @@ l'autre côté ; en l'enclenchant, la droite prend les réglages de la gauche) e
 **POWER** (éteint, le signal tel qu'il est entré).
 
 Survoler ou tourner un réglage affiche sa valeur juste à côté de lui ; un
-double-clic remet un bouton à sa valeur de départ. Les leviers se cliquent : en
-haut de BOOST / CUT pour monter d'un cran, en bas pour descendre.
+double-clic remet un bouton à sa valeur de départ. Chaque levier d'une fenêtre
+prend toute sa moitié de fenêtre, mots compris : un clic sur BOOST, CUT, SHELF ou
+BELL y envoie le levier (un clic sur le mot déjà allumé remet la bande en OUT) ;
+on peut aussi le glisser vers le haut ou le bas, ou tourner la molette dessus.
 
 Les courbes ont été placées par raisonnement à partir de ce que l'on sait de
 l'original (spécifications publiées, comportement d'un réseau passif), pas mesurées
@@ -90,6 +92,7 @@ Une capture de l'interface, sans hôte, et le plugin entier mis à l'épreuve :
 cmake --build build --config Release --target massif_snapshot
 build/Release/massif_snapshot capture.png 1.5
 build/Release/massif_snapshot --selftest
+build/Release/massif_snapshot --switches
 ```
 
 Sur GitHub, chaque push construit Windows et macOS ; les plugins sont déposés sur

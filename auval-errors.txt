@@ -1,0 +1,76 @@
+15:* * PASS
+26:* * PASS
+45:* * PASS
+49:* * PASS
+53:    PASS
+55:    PASS
+57:    PASS
+59:* * PASS
+63:* * PASS
+70:    PASS
+76:    PASS
+79:    PASS
+81:* * PASS
+91:  -parameter PASS
+98:  -parameter PASS
+105:  -parameter PASS
+112:  -parameter PASS
+119:  -parameter PASS
+126:  -parameter PASS
+133:  -parameter PASS
+140:  -parameter PASS
+147:  -parameter PASS
+154:  -parameter PASS
+161:  -parameter PASS
+168:  -parameter PASS
+175:  -parameter PASS
+190:  -parameter PASS
+205:  -parameter PASS
+212:  -parameter PASS
+219:  -parameter PASS
+226:  -parameter PASS
+233:  -parameter PASS
+240:  -parameter PASS
+260:  -parameter PASS
+267:  -parameter PASS
+279:  -parameter PASS
+299:  -parameter PASS
+306:  -parameter PASS
+318:  -parameter PASS
+338:  -parameter PASS
+345:  -parameter PASS
+357:  -parameter PASS
+377:  -parameter PASS
+384:  -parameter PASS
+396:  -parameter PASS
+416:  -parameter PASS
+423:  -parameter PASS
+435:  -parameter PASS
+455:  -parameter PASS
+462:  -parameter PASS
+474:  -parameter PASS
+494:  -parameter PASS
+501:  -parameter PASS
+513:  -parameter PASS
+533:  -parameter PASS
+540:  -parameter PASS
+552:  -parameter PASS
+567:  -parameter PASS
+582:  -parameter PASS
+589:  -parameter PASS
+596:  -parameter PASS
+603:  -parameter PASS
+610:  -parameter PASS
+613:  PASS
+615:* * PASS
+662:* * PASS
+670:  PASS
+679:  PASS
+683:  PASS
+688:  PASS
+691:  PASS
+696:  PASS
+699:  PASS
+702:  PASS
+704:* * PASS
+706:AU VALIDATION SUCCEEDED.

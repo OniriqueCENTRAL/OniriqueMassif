@@ -78,8 +78,10 @@ juce_add_plugin(OniriqueMassif
     VST3_CATEGORIES Fx EQ
     COPY_PLUGIN_AFTER_BUILD ${MASSIF_COPY_AFTER_BUILD})
 
-# The photographs the front is made of (tools/photo.cpp).
+# The Onirique sigil, for the bar over the front, and the photographs the front
+# is made of (tools/photo.cpp).
 juce_add_binary_data(MassifAssets SOURCES
+    Resources/sigil.png
     Resources/photo/front-off.jpg
     Resources/photo/front-lit.jpg
     Resources/photo/knob.png

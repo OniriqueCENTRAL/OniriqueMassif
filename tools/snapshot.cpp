@@ -1,7 +1,7 @@
 // Renders the editor to a PNG without a host, so a change to the front can be
 // looked at straight from the build. A development tool, not part of the product.
 //
-//   massif_snapshot out.png [scale]
+//   massif_snapshot out.png [scale] [browser|menu]   with the bar's preset browser or its menu open
 //   massif_snapshot --selftest       the plugin as a host drives it: blocks, twice the rate, bypass
 //   massif_snapshot --switches       the window toggles under the pointer: clicks, drags, the wheel
 #include "../Source/PluginEditor.h"
@@ -100,6 +100,31 @@ int selfTest (juce::AudioProcessor& processor, juce::AudioProcessorValueTreeStat
     std::printf ("  power off, 100 Hz: %+.2f dB\n", bypassed.first);
     check (std::abs (bypassed.first) < 0.1, "power off: as it came in");
     check (finite, "nothing blows up");
+    set (state, "bypass", 0.0f);
+
+    // The presets: every stock one names only what exists, and loads; A/B and the saved state keep both sides.
+    auto& presets = static_cast<onirique::MassifProcessor&> (processor).presets;
+    const auto problems = presets.checkStock();
+
+    for (const auto& problem : problems)
+        std::printf ("  %s\n", problem.toRawUTF8());
+
+    check (problems.isEmpty(), "the stock presets name real parameters, within their ranges");
+
+    presets.load ("Mastering Air");
+    check (presets.getCurrentName() == "Mastering Air" && std::abs (state.getRawParameterValue ("r4gain")->load() - 2.5f) < 0.01f
+               && std::abs (state.getRawParameterValue ("l1gain")->load() - 2.0f) < 0.01f,
+           "a stock preset loads, on both sides");
+    presets.switchToSlot (1);
+    presets.load ("Telephone");
+    juce::MemoryBlock saved;
+    processor.getStateInformation (saved);
+    presets.switchToSlot (0);
+    check (presets.getCurrentName() == "Mastering Air" && state.getRawParameterValue ("lhighpass")->load() < 0.5f, "A comes back as it was left");
+    processor.setStateInformation (saved.getData(), (int) saved.getSize());
+    check (presets.getSlot() == 1 && presets.getCurrentName() == "Telephone", "the saved state keeps the side being heard");
+    presets.switchToSlot (0);
+    check (presets.getCurrentName() == "Mastering Air", "and the other side");
 
     return failures == 0 ? 0 : 1;
 }
@@ -116,7 +141,7 @@ int switchTest (onirique::MassifProcessor& processor, juce::AudioProcessorValueT
     };
 
     std::unique_ptr<AudioProcessorEditor> editor (processor.createEditor());
-    editor->setSize (onirique::MassifEditor::kWidth, onirique::MassifEditor::kHeight);
+    editor->setSize (onirique::MassifEditor::kWidth, onirique::MassifEditor::kTotalHeight);
 
     // The component that takes the pointer for a control: the one lying on its box.
     auto find = [&] (const std::string& id) -> Component*
@@ -230,13 +255,25 @@ int main (int argc, char** argv)
 
     {
         std::unique_ptr<juce::AudioProcessorEditor> editor (massif.createEditor());
-        editor->setSize (onirique::MassifEditor::kWidth, onirique::MassifEditor::kHeight);
+        editor->setSize (onirique::MassifEditor::kWidth, onirique::MassifEditor::kTotalHeight);
 
         // This machine may hold no licence for the plugin: the activation page
         // is not what is being looked at.
+        const juce::String panel (argc > 3 ? argv[3] : "");
+
         for (auto* child : editor->getChildren())
+        {
             if (dynamic_cast<onirique::license::Overlay*> (child) != nullptr)
                 child->setVisible (false);
+
+            if (auto* bar = dynamic_cast<onirique::nuit::Bar*> (child))
+            {
+                if (panel == "browser")
+                    bar->openBrowser();
+                else if (panel == "menu")
+                    bar->openMenu();
+            }
+        }
 
         const auto image = editor->createComponentSnapshot (editor->getLocalBounds(), true, scale);
 

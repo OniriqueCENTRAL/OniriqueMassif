@@ -87,6 +87,78 @@ namespace
 
         return layout;
     }
+
+    //==============================================================================
+    enum Tags { vocal = 1, drums = 2, bass = 4, instruments = 8, mix = 16, mastering = 32 };
+
+    /** A band as the stock presets set it: which one (1 to 4), its gain, its bandwidth (0 wide, 1 narrow),
+        the position of its frequency switch (0 to 10), boost or cut, and shelf or bell. */
+    struct Band { int band; float gain, bandwidth; int freq, mode; bool shelf; };
+
+    /** A preset set the same on both sides, as the link leaves them; `sides` names what each side has besides
+        its bands (gain, lowpass, highpass), without the side's letter. */
+    PresetBank::Stock linked (const char* name, int tags, std::initializer_list<Band> bands,
+                              std::initializer_list<std::pair<const char*, float>> sides = {})
+    {
+        PresetBank::Stock preset { name, tags, {} };
+
+        for (const String side : { "l", "r" })
+        {
+            for (const auto& b : bands)
+            {
+                const auto n = side + String (b.band);
+                preset.values.push_back ({ n + "gain", b.gain });
+                preset.values.push_back ({ n + "bw", b.bandwidth });
+                preset.values.push_back ({ n + "freq", (float) b.freq });
+                preset.values.push_back ({ n + "mode", (float) b.mode });
+                preset.values.push_back ({ n + "shelf", b.shelf ? 1.0f : 0.0f });
+            }
+
+            for (const auto& [what, value] : sides)
+                preset.values.push_back ({ side + what, value });
+        }
+
+        return preset;
+    }
+
+    // Starting points. The frequency switches, by position:
+    //   band 1  22 33 47 68 100 150 220 330 470 680 1K        band 2  82 120 180 270 390 560 820 1K2 1K8 2K7 3K9
+    //   band 3  220 330 470 680 1K 1K5 2K2 3K3 4K7 6K8 10K    band 4  560 820 1K2 1K8 2K7 3K9 5K6 8K2 12K 16K 27K
+    //   lowpass OFF 18K 12K 9K 7K5 6K                         highpass OFF 22 39 68 120 220
+    std::vector<PresetBank::Stock> stockPresets()
+    {
+        using namespace msf;
+        constexpr bool shelf = true, bell = false;
+
+        return {
+            { "Default", 0, {} },
+
+            linked ("Mastering Air", mastering, { { 1, 2.0f, 0.4f, 1, boost, shelf }, { 4, 2.5f, 0.3f, 9, boost, shelf } }),
+            linked ("Mastering Glow", mastering | mix, { { 1, 1.5f, 0.4f, 2, boost, shelf }, { 2, 1.5f, 0.4f, 3, cut, bell },
+                                                         { 3, 1.0f, 0.2f, 7, boost, bell }, { 4, 3.0f, 0.3f, 10, boost, shelf } }),
+            linked ("Mix Bus Open", mix, { { 1, 2.0f, 0.5f, 3, boost, shelf }, { 3, 1.5f, 0.2f, 8, boost, bell }, { 4, 2.0f, 0.3f, 9, boost, shelf } }),
+            linked ("Warm Low Shelf", mix | bass, { { 1, 3.0f, 0.65f, 4, boost, shelf }, { 4, 1.5f, 0.3f, 8, cut, shelf } }),
+            linked ("Mud Cleanup", mix | mastering, { { 2, 2.0f, 0.5f, 3, cut, bell } }, { { "highpass", 2.0f } }),
+            linked ("Hot Tubes", mix, {}, { { "gain", 3.0f } }),
+
+            linked ("Vocal Silk", vocal, { { 2, 2.0f, 0.5f, 3, cut, bell }, { 3, 2.0f, 0.35f, 7, boost, bell }, { 4, 3.0f, 0.3f, 8, boost, shelf } },
+                    { { "highpass", 4.0f } }),
+            linked ("Vocal Body", vocal, { { 2, 2.0f, 0.4f, 2, boost, bell }, { 3, 1.5f, 0.5f, 3, cut, bell }, { 4, 2.0f, 0.3f, 7, boost, shelf } },
+                    { { "highpass", 3.0f } }),
+            linked ("Telephone", vocal, { { 3, 6.0f, 0.5f, 5, boost, bell } }, { { "highpass", 5.0f }, { "lowpass", 5.0f } }),
+
+            linked ("Drum Bus Punch", drums, { { 1, 3.0f, 0.5f, 3, boost, bell }, { 2, 3.0f, 0.6f, 4, cut, bell }, { 4, 2.5f, 0.45f, 6, boost, bell } }),
+            linked ("Kick & Snare", drums, { { 1, 4.0f, 0.6f, 2, boost, bell }, { 2, 2.5f, 0.6f, 4, cut, bell }, { 3, 3.0f, 0.5f, 6, boost, bell } }),
+            linked ("Overheads Air", drums, { { 2, 2.0f, 0.4f, 3, cut, bell }, { 4, 3.0f, 0.3f, 9, boost, shelf } }, { { "highpass", 4.0f } }),
+
+            linked ("Bass Shape", bass, { { 1, 3.0f, 0.5f, 2, boost, shelf }, { 2, 2.5f, 0.55f, 3, cut, bell }, { 3, 2.0f, 0.5f, 4, boost, bell } },
+                    { { "lowpass", 3.0f } }),
+
+            linked ("Acoustic Clarity", instruments, { { 2, 2.0f, 0.5f, 2, cut, bell }, { 4, 2.5f, 0.3f, 8, boost, shelf } }),
+            linked ("Piano Bloom", instruments, { { 1, 2.0f, 0.5f, 4, boost, shelf }, { 3, 1.5f, 0.6f, 4, cut, bell }, { 4, 2.0f, 0.3f, 9, boost, shelf } }),
+            linked ("Dark & Smooth", mix | instruments, { { 4, 3.0f, 0.3f, 6, cut, shelf } }, { { "lowpass", 2.0f } }),
+        };
+    }
 }
 
 //==============================================================================
@@ -94,7 +166,8 @@ MassifProcessor::MassifProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput ("Input", AudioChannelSet::stereo(), true)
                           .withOutput ("Output", AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "Massif", createLayout())
+      apvts (*this, nullptr, "Massif", createLayout()),
+      presets (apvts, "Massif", stockPresets(), { "Vocal", "Drums", "Bass", "Instruments", "Mix", "Mastering" })
 {
     using namespace onirique::layout;
     auto get = [this] (const std::string& s) { return apvts.getRawParameterValue (String (s)); };
@@ -216,14 +289,21 @@ AudioProcessorEditor* MassifProcessor::createEditor()
 //==============================================================================
 void MassifProcessor::getStateInformation (MemoryBlock& destination)
 {
-    if (const auto xml = apvts.copyState().createXml())
+    auto state = apvts.copyState();
+    presets.writeState (state);
+
+    if (const auto xml = state.createXml())
         copyXmlToBinary (*xml, destination);
 }
 
 void MassifProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (const auto xml = getXmlFromBinary (data, sizeInBytes); xml != nullptr && xml->hasTagName (apvts.state.getType()))
-        apvts.replaceState (ValueTree::fromXml (*xml));
+    {
+        auto state = ValueTree::fromXml (*xml);
+        presets.readState (state);
+        apvts.replaceState (state);
+    }
 }
 
 } // namespace onirique

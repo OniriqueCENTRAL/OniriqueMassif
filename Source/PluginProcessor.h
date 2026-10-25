@@ -6,6 +6,7 @@
 
 #include "License/LicenseGuard.h"
 #include "dsp/Massif.h"
+#include "ui/OniriquePresets.h"
 
 namespace onirique
 {
@@ -48,6 +49,9 @@ public:
     void setStateInformation (const void*, int) override;
 
     AudioProcessorValueTreeState apvts;
+
+    /** The stock presets, the user's, the A/B comparison: what the bar over the front shows. */
+    PresetBank presets;
 
     /** The licence ONIRIQUE CENTRAL wrote on this machine for this plugin, under
         the identifier the plugin has in its catalogue. */

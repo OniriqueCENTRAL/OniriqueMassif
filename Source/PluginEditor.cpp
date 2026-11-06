@@ -470,15 +470,21 @@ void MassifEditor::paint (Graphics& g)
 
 void MassifEditor::retint()
 {
-    std::vector<Image*> all { &frontOff, &frontLit };
+    std::vector<Image*> all { &frontOff, &frontLit, &lampGlow[0], &lampGlow[1] };   // les halos des lampes aussi
     for (auto& entry : photos) all.push_back (&entry.second);
 
-    if (daOriginals.empty())
-        for (auto* image : all)
-            daOriginals.push_back (*image);
+    // la première fois : les pixels rouges de chaque photo repérés ; ensuite, recolorer est rapide
+    if (daTints.empty())
+        for (size_t i = 0; i < all.size(); ++i)
+        {
+            daTints.emplace_back();
+            // les halos des lampes (2, 3) gardent leur éclat : seule leur teinte suit la couleur de l'interface
+            if (i >= 2) daTints.back().prepare (*all[i], all[i]->getBounds().toFloat(), (float) all[i]->getWidth(), false);
+            else daTints.back().prepare (*all[i]);
+        }
 
-    for (size_t i = 0; i < all.size() && i < daOriginals.size(); ++i)
-        *all[i] = da::tintPhoto (daOriginals[i]);
+    for (size_t i = 0; i < all.size() && i < daTints.size(); ++i)
+        *all[i] = daTints[i].render();
 }
 
 void MassifEditor::paintGlow (Graphics& g)
